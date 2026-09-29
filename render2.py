@@ -85,7 +85,7 @@ def main(job_path):
         )
         part = f"work/part{i}.mp4"
         sh(["ffmpeg", "-y", "-v", "error", "-stream_loop", "-1", "-i", src, "-t", f"{segs[i]:.3f}",
-            "-vf", vf, "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+            "-vf", vf, "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-maxrate", "2500k", "-bufsize", "5000k",
             "-pix_fmt", "yuv420p", part])
         parts.append(part)
 
