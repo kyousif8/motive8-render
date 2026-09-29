@@ -1,0 +1,33 @@
+name: render
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Render job as JSON (captions, durations, broll_urls, audio_url, out_name)"
+        required: true
+permissions:
+  contents: write
+concurrency: render
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ffmpeg and font
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          mkdir -p fonts
+          curl -sL -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
+      - name: Write job file
+        env:
+          JOB: ${{ github.event.inputs.job }}
+        run: printf '%s' "$JOB" > job.json
+      - name: Render
+        run: python3 render.py job.json
+      - name: Publish to the "renders" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view renders >/dev/null 2>&1 || gh release create renders --title renders --notes "Motive8 rendered videos"
+          gh release upload renders out/*.mp4 --clobber
