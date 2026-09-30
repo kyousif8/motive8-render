@@ -31,3 +31,8 @@ jobs:
         run: |
           gh release view renders >/dev/null 2>&1 || gh release create renders --title renders --notes "Motive8 rendered videos"
           gh release upload renders out/*.mp4 --clobber
+      - name: Queue on TikTok via Buffer
+        continue-on-error: true
+        env:
+          BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+        run: python3 buffer_post.py job.txt
