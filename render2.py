@@ -8,7 +8,7 @@ Input: job.json with
   out_name      output file name, e.g. "Comfort is the enemy of growth.mp4"
 Output: out/<out_name>, 1080x1920, 30fps, H.264 + AAC.
 """
-import base64, json, os, subprocess, sys, textwrap, urllib.request
+import base64, json, os, subprocess, sys, textwrap, time, urllib.request
 
 W, H, FPS = 1080, 1920, 30
 FONT = os.environ.get("M8_FONT", "fonts/Poppins-Bold.ttf")
@@ -19,10 +19,35 @@ def sh(cmd):
     subprocess.run(cmd, check=True)
 
 
-def fetch(url, path):
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=120) as r, open(path, "wb") as f:
-        f.write(r.read())
+def fetch(url, path, tries=3):
+    """Download with retries; raises if the URL is empty or keeps failing."""
+    if not url or not url.startswith(("http://", "https://", "file://")):
+        raise ValueError("empty or invalid url: %r" % url)
+    last = None
+    for attempt in range(tries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=120) as r, open(path, "wb") as f:
+                f.write(r.read())
+            return
+        except Exception as e:
+            last = e
+            print("download failed (attempt %d): %s" % (attempt + 1, e))
+            time.sleep(3)
+    raise last
+
+
+def get_broll(urls, i, path):
+    """Use clip i; if it is missing or broken, fall back to the other clips in order."""
+    for j in [i] + [k for k in range(len(urls)) if k != i]:
+        try:
+            fetch(urls[j], path)
+            if j != i:
+                print("b-roll %d unavailable, reused clip %d" % (i, j))
+            return
+        except Exception as e:
+            print("b-roll %d skipped: %s" % (j, e))
+    raise SystemExit("no usable b-roll at all")
 
 
 def duration(path):
@@ -71,7 +96,7 @@ def main(job_path):
     parts = []
     for i in range(n):
         src = f"work/broll{i}"
-        fetch(job["broll_urls"][i], src)
+        get_broll(job["broll_urls"], i, src)
         txt = f"work/cap{i}.txt"
         open(txt, "w", encoding="utf-8").write("\n".join(textwrap.wrap(caps[i].strip(), 28)))
         vf = (
