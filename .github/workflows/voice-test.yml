@@ -1,0 +1,38 @@
+name: voice-test
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Compact job string copied from a motive8 run"
+        required: true
+      voices:
+        description: "Kokoro voices, comma separated"
+        required: false
+        default: "am_michael,am_fenrir"
+permissions:
+  contents: write
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg espeak-ng
+          mkdir -p fonts
+          curl -sL -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
+          pip install -q torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -q "kokoro>=0.9" soundfile
+      - name: Write job file
+        env:
+          JOB: ${{ github.event.inputs.job }}
+        run: printf '%s' "$JOB" > job.txt
+      - name: Render Kokoro versions
+        run: python3 kokoro_test.py job.txt "${{ github.event.inputs.voices }}"
+      - name: Publish to the "voice-tests" release (not posted anywhere)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view voice-tests >/dev/null 2>&1 || gh release create voice-tests --title voice-tests --notes "Voice comparison samples"
+          gh release upload voice-tests out/*.mp4 --clobber
