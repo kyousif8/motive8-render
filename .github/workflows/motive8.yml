@@ -11,18 +11,33 @@ concurrency: motive8
 jobs:
   render:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Install ffmpeg and font
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-voice.txt
+      - name: Cache Kokoro model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: kokoro-82m-v1
+      - name: Install ffmpeg, font and voice
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg espeak-ng
+          pip install -q torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -q -r requirements-voice.txt
           mkdir -p fonts
           curl -sL -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
       - name: Write job file
         env:
           JOB: ${{ github.event.inputs.job }}
         run: printf '%s' "$JOB" > job.txt
+      - name: Voice (Kokoro am_michael, falls back to Deepgram)
+        continue-on-error: true
+        run: python3 kokoro_tts.py job.txt
       - name: Render
         run: python3 render2.py job.txt
       - name: Publish to the "renders" release
