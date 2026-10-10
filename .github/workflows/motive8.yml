@@ -25,10 +25,10 @@ jobs:
           path: ~/.cache/huggingface
           key: kokoro-82m-v1
       - name: Install ffmpeg, font and voice
+        timeout-minutes: 12
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg espeak-ng
-          pip install -q torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -q -r requirements-voice.txt
+          for i in 1 2 3; do timeout 240 sudo apt-get update -qq && timeout 300 sudo apt-get install -y -qq ffmpeg espeak-ng && break; echo "apt retry $i"; sleep 5; done
+          for i in 1 2 3; do timeout 300 pip install -q --timeout 60 torch --index-url https://download.pytorch.org/whl/cpu && timeout 240 pip install -q --timeout 60 -r requirements-voice.txt && break; echo "pip retry $i"; sleep 5; done
           mkdir -p fonts
           curl -sL -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
       - name: Write job file
