@@ -153,7 +153,7 @@ def main(job_path):
     filters.append(f"drawtext=fontfile={FONT}:text='{HANDLE}':fontsize=34:fontcolor=white@0.55:x=(w-text_w)/2:y=h*0.90")
     wfile("work/vf.txt", ",".join(filters))
     sh(["ffmpeg", "-y", "-v", "error", "-i", "work/visual.mp4", "-filter_script:v", "work/vf.txt",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-maxrate", "2500k", "-bufsize", "5000k",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "27", "-maxrate", "1100k", "-bufsize", "2200k",
         "-pix_fmt", "yuv420p", "work/texted.mp4"])
 
     # 3) Audio: voice from frame one, music underneath.
@@ -171,10 +171,10 @@ def main(job_path):
               f"[1:a][m]amix=inputs=2:duration=first:normalize=0[a]")
         sh(["ffmpeg", "-y", "-v", "error", "-i", "work/texted.mp4", "-i", "work/voice", "-stream_loop", "-1",
             "-i", "work/music", "-filter_complex", af, "-map", "0:v", "-map", "[a]", "-c:v", "copy",
-            "-c:a", "aac", "-b:a", "160k", "-t", f"{total:.3f}", "-movflags", "+faststart", out])
+            "-c:a", "aac", "-b:a", "128k", "-t", f"{total:.3f}", "-movflags", "+faststart", out])
     else:
         sh(["ffmpeg", "-y", "-v", "error", "-i", "work/texted.mp4", "-i", "work/voice", "-map", "0:v", "-map", "1:a",
-            "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", out])
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart", out])
     print("rendered", out, round(duration(out), 2), "s")
 
 
