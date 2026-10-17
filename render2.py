@@ -10,6 +10,8 @@ Output: out/<out_name>, 1080x1920, 30fps, H.264 + AAC.
 """
 import base64, json, os, subprocess, sys, textwrap, time, urllib.parse, urllib.request
 
+import modesty
+
 W, H, FPS = 1080, 1920, 30
 FONT = os.environ.get("M8_FONT", "fonts/Poppins-Bold.ttf")
 HANDLE = "@motive8ers"
@@ -37,12 +39,12 @@ def fetch(url, path, tries=3):
     raise last
 
 
-def pexels_url(query):
-    """Turn a b-roll search phrase into a direct Pexels video file URL (portrait, about 1080 wide)."""
+def pexels_candidates(query, per_page=15):
+    """Search Pexels for portrait videos; yield (page_url, file_link) best-first."""
     key = os.environ.get("PEXELS_API_KEY", "").strip()
     if not key:
         raise ValueError("no PEXELS_API_KEY to search for %r" % query)
-    q = urllib.parse.urlencode({"query": query, "orientation": "portrait", "per_page": 5})
+    q = urllib.parse.urlencode({"query": query, "orientation": "portrait", "per_page": per_page})
     req = urllib.request.Request("https://api.pexels.com/videos/search?" + q,
                                  headers={"Authorization": key, "User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=60) as r:
@@ -52,24 +54,72 @@ def pexels_url(query):
         if not files:
             continue
         files.sort(key=lambda f: abs((f.get("width") or 0) - 1080))
-        return files[0]["link"]
-    raise ValueError("no Pexels video for %r" % query)
+        tags = " ".join(t if isinstance(t, str) else str(t.get("name", "")) for t in (v.get("tags") or []))
+        yield (v.get("url") or "") + " " + tags, files[0]["link"]
 
 
-def resolve(entry):
+USED = set()  # clip links already used in this video, so the same shot is not repeated
+
+
+def clean_clip(entry, path):
+    """Download a modest clip for this entry into path (see modesty.py). Raises if none passes."""
     entry = (entry or "").strip()
-    return entry if entry.startswith(("http://", "https://", "file://")) else pexels_url(entry)
+    if not entry:
+        raise ValueError("empty b-roll entry")
+    if modesty.detector() is None:
+        queries = list(modesty.SAFE_SCENERY)  # cannot check people, so use scenery only
+    elif entry.startswith(("http://", "https://", "file://")):
+        bad = modesty.blocked_text(entry)
+        if bad:
+            raise ValueError("blocked word %r in %s" % (bad, entry))
+        fetch(entry, path)
+        why = modesty.check_clip(path, entry)
+        if why:
+            raise ValueError("clip rejected (%s): %s" % (why, entry))
+        return
+    else:
+        bad = modesty.blocked_text(entry)
+        queries = [] if bad else [entry]
+        if bad:
+            print("search phrase %r has blocked word %r; using scenery" % (entry, bad))
+        queries += modesty.SAFE_SCENERY
+    for query in queries:
+        try:
+            cands = list(pexels_candidates(query))
+        except Exception as e:
+            print("search failed for %r: %s" % (query, e))
+            continue
+        for page, link in cands:
+            if link in USED:
+                continue
+            bad = modesty.blocked_text(page)
+            if bad:
+                print("  skip %s (word %r)" % (page.split()[0] if page else link, bad))
+                continue
+            try:
+                fetch(link, path)
+            except Exception as e:
+                print("  download failed:", e)
+                continue
+            why = modesty.check_clip(path, query + " " + page)
+            if why:
+                print("  reject %s (%s)" % (page.split()[0] if page else link, why))
+                continue
+            USED.add(link)
+            print("  ok %r -> %s" % (query, page.split()[0] if page else link))
+            return
+    raise ValueError("no modest clip found for %r" % entry)
 
 
 def get_broll(urls, i, path):
-    """Use clip i; if it is missing or broken, fall back to the other clips in order.
+    """Use clip i; if no modest clip is found for it, fall back to the other entries in order.
 
     Each entry is either a direct video URL or a search phrase looked up on Pexels."""
     for j in [i] + [k for k in range(len(urls)) if k != i]:
         try:
-            fetch(resolve(urls[j]), path)
+            clean_clip(urls[j], path)
             if j != i:
-                print("b-roll %d unavailable, reused clip %d" % (i, j))
+                print("b-roll %d unavailable, used entry %d" % (i, j))
             return
         except Exception as e:
             print("b-roll %d skipped: %s" % (j, e))
