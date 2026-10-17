@@ -39,6 +39,8 @@ jobs:
         continue-on-error: true
         run: python3 kokoro_tts.py job.txt
       - name: Render
+        env:
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: python3 render2.py job.txt
       - name: Publish to the "renders" release
         env:
