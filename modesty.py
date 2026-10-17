@@ -4,9 +4,11 @@ Every b-roll clip is checked before it can go into a video:
   1. Words in the Pexels page address (its title) - swimwear, underwear, kissing, same-sex couples, etc.
   2. A nudity/body-exposure detector (NudeNet) run on frames across the clip: bras, bikinis, bare
      midriffs, cleavage, bare shoulders/armpits, short shorts and anything more are rejected.
-  3. Couple scenes (couple, marriage, wedding, husband/wife...) must clearly show both a man's and a
-     woman's face, and any affection scene (love, hug...) showing two people of one gender alone is
-     rejected, so couples are always a man and a woman.
+  3. No romantic couple footage at all: a search phrase about a couple/marriage/wedding is swapped for
+     symbolic shots (rings, two coffee cups, a home interior...), and any stock clip whose title mentions
+     a couple, love, kissing, hugging or holding hands is skipped. Stock sites cannot be trusted to show
+     only a man and a woman, so the safe rule is to show none. As an extra check, a clip that shows two
+     people of one gender alone in an affection scene is rejected.
 If the detector cannot load, only no-people scenery is allowed, so nothing unchecked gets through.
 """
 import glob, os, re, shutil, subprocess, tempfile
@@ -32,6 +34,9 @@ COUPLE_WORDS = ["couple", "couples", "lovers", "romance", "romantic", "marriage"
 # Affection scenes: never two people of one gender alone.
 ROMANCE_WORDS = COUPLE_WORDS + ["love", "partner", "partners", "date", "hug", "hugging", "embrace", "cuddle",
                                 "cuddling", "relationship", "holding hands"]
+COUPLE_SUBSTITUTES = ["wedding rings close up", "two coffee cups on table", "cozy living room interior",
+                      "handwritten letter on table", "family dinner table food", "sunset through window",
+                      "house keys in hand", "flowers in vase"]
 SAFE_SCENERY = ["sunrise over mountains", "ocean waves aerial", "forest path sunlight", "city skyline night",
                 "clouds timelapse sky", "empty road landscape", "desert dunes", "waterfall nature",
                 "rain on window", "mountain lake calm"]

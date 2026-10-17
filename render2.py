@@ -79,9 +79,14 @@ def clean_clip(entry, path):
         return
     else:
         bad = modesty.blocked_text(entry)
-        queries = [] if bad else [entry]
         if bad:
             print("search phrase %r has blocked word %r; using scenery" % (entry, bad))
+            queries = []
+        elif modesty.couple_scene(entry):
+            print("search phrase %r is a couple scene; using symbolic shots instead" % entry)
+            queries = list(modesty.COUPLE_SUBSTITUTES)
+        else:
+            queries = [entry]
         queries += modesty.SAFE_SCENERY
     for query in queries:
         try:
@@ -92,7 +97,7 @@ def clean_clip(entry, path):
         for page, link in cands:
             if link in USED:
                 continue
-            bad = modesty.blocked_text(page)
+            bad = modesty.blocked_text(page) or (modesty.romantic(page) and "romance")
             if bad:
                 print("  skip %s (word %r)" % (page.split()[0] if page else link, bad))
                 continue
