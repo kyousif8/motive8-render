@@ -1,0 +1,35 @@
+name: weekly-compilation
+on:
+  schedule:
+    - cron: "0 8 * * 0"   # every Sunday 08:00 UTC (11:00 Cairo)
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: 'Optional JSON list [{"n":75,"title":"..."}]; empty = stories from the last 7 days'
+        required: false
+        default: ""
+      post_to_youtube:
+        description: "Queue the result on YouTube through Buffer"
+        required: false
+        default: "true"
+permissions:
+  contents: write
+concurrency: weekly-compilation
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ffmpeg and font
+        run: |
+          for i in 1 2 3; do timeout 240 sudo apt-get update -qq && timeout 300 sudo apt-get install -y -qq ffmpeg && break; sleep 5; done
+          mkdir -p fonts
+          curl -sL -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
+      - name: Build and queue the compilation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+          MANIFEST: ${{ github.event.inputs.manifest }}
+          POST_TO_YOUTUBE: ${{ github.event.inputs.post_to_youtube || 'true' }}
+        run: python3 compile.py

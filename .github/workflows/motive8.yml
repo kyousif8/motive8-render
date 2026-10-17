@@ -46,6 +46,11 @@ jobs:
         run: |
           gh release view renders >/dev/null 2>&1 || gh release create renders --title renders --notes "Motive8 rendered videos"
           gh release upload renders out/*.mp4 --clobber
+      - name: Save story for the weekly compilation
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 save_story.py job.txt
       - name: Queue on TikTok via Buffer
         continue-on-error: true
         env:
