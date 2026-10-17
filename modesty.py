@@ -4,8 +4,9 @@ Every b-roll clip is checked before it can go into a video:
   1. Words in the Pexels page address (its title) - swimwear, underwear, kissing, same-sex couples, etc.
   2. A nudity/body-exposure detector (NudeNet) run on frames across the clip: bras, bikinis, bare
      midriffs, cleavage, bare shoulders/armpits, short shorts and anything more are rejected.
-  3. For romance-type scenes (couple, love, marriage, wedding...), a clip showing two or more people of
-     the same gender and none of the other is rejected, so couples are always a man and a woman.
+  3. Couple scenes (couple, marriage, wedding, husband/wife...) must clearly show both a man's and a
+     woman's face, and any affection scene (love, hug...) showing two people of one gender alone is
+     rejected, so couples are always a man and a woman.
 If the detector cannot load, only no-people scenery is allowed, so nothing unchecked gets through.
 """
 import glob, os, re, shutil, subprocess, tempfile
@@ -24,10 +25,13 @@ BLOCK_WORDS = [
     "gay", "lesbian", "lesbians", "lgbt", "lgbtq", "lgbtqia", "queer", "pride", "same-sex",
     "homosexual", "bisexual", "transgender", "trans", "drag", "rainbow-flag", "nonbinary", "non-binary",
 ]
-ROMANCE_WORDS = ["couple", "couples", "love", "lovers", "romance", "romantic", "marriage", "married",
-                 "wedding", "bride", "groom", "husband", "wife", "spouse", "partner", "partners", "date",
-                 "dating", "boyfriend", "girlfriend", "honeymoon", "anniversary", "valentine", "hug",
-                 "hugging", "embrace", "cuddle", "cuddling", "relationship", "proposal", "engaged"]
+# Couple scenes: the clip must clearly show a man AND a woman, and never two of one gender alone.
+COUPLE_WORDS = ["couple", "couples", "lovers", "romance", "romantic", "marriage", "married", "wedding", "bride",
+                "groom", "husband", "wife", "spouse", "boyfriend", "girlfriend", "honeymoon", "anniversary",
+                "valentine", "dating", "engaged", "proposal", "newlyweds", "fiance", "fiancee"]
+# Affection scenes: never two people of one gender alone.
+ROMANCE_WORDS = COUPLE_WORDS + ["love", "partner", "partners", "date", "hug", "hugging", "embrace", "cuddle",
+                                "cuddling", "relationship", "holding hands"]
 SAFE_SCENERY = ["sunrise over mountains", "ocean waves aerial", "forest path sunlight", "city skyline night",
                 "clouds timelapse sky", "empty road landscape", "desert dunes", "waterfall nature",
                 "rain on window", "mountain lake calm"]
@@ -74,8 +78,13 @@ def blocked_text(text):
 
 
 def romantic(text):
+    toks, hy = words(text)
+    return any(w in toks or "-" + w.replace(" ", "-") + "-" in hy for w in ROMANCE_WORDS)
+
+
+def couple_scene(text):
     toks, _ = words(text)
-    return any(w in toks for w in ROMANCE_WORDS)
+    return any(w in toks for w in COUPLE_WORDS)
 
 
 def frames(video, n=FRAMES):
@@ -100,6 +109,8 @@ def check_clip(video, context=""):
     if det is None:
         return "no detector"
     romance = romantic(context)
+    couple = couple_scene(context)
+    any_f = any_m = False
     tmp, imgs = frames(video)
     try:
         if not imgs:
@@ -110,11 +121,13 @@ def check_clip(video, context=""):
                 lim = LIMITS.get(d["class"])
                 if lim is not None and d["score"] >= lim:
                     return "%s %.2f" % (d["class"], d["score"])
-            if romance:
-                fem = sum(1 for d in found if d["class"] == "FACE_FEMALE" and d["score"] >= 0.3)
-                mal = sum(1 for d in found if d["class"] == "FACE_MALE" and d["score"] >= 0.3)
-                if (fem >= 2 and mal == 0) or (mal >= 2 and fem == 0):
-                    return "same-gender pair in a romance scene"
+            fem = sum(1 for d in found if d["class"] == "FACE_FEMALE" and d["score"] >= 0.3)
+            mal = sum(1 for d in found if d["class"] == "FACE_MALE" and d["score"] >= 0.3)
+            any_f, any_m = any_f or fem > 0, any_m or mal > 0
+            if romance and ((fem >= 2 and mal == 0) or (mal >= 2 and fem == 0)):
+                return "same-gender pair in a romance scene"
+        if couple and not (any_f and any_m):
+            return "couple scene without a clearly visible man and woman"
         return None
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
