@@ -8,7 +8,7 @@ Input: job.json with
   out_name      output file name, e.g. "Comfort is the enemy of growth.mp4"
 Output: out/<out_name>, 1080x1920, 30fps, H.264 + AAC.
 """
-import base64, json, os, subprocess, sys, textwrap, time, urllib.request
+import base64, json, os, subprocess, sys, textwrap, time, urllib.parse, urllib.request
 
 W, H, FPS = 1080, 1920, 30
 FONT = os.environ.get("M8_FONT", "fonts/Poppins-Bold.ttf")
@@ -37,11 +37,37 @@ def fetch(url, path, tries=3):
     raise last
 
 
+def pexels_url(query):
+    """Turn a b-roll search phrase into a direct Pexels video file URL (portrait, about 1080 wide)."""
+    key = os.environ.get("PEXELS_API_KEY", "").strip()
+    if not key:
+        raise ValueError("no PEXELS_API_KEY to search for %r" % query)
+    q = urllib.parse.urlencode({"query": query, "orientation": "portrait", "per_page": 5})
+    req = urllib.request.Request("https://api.pexels.com/videos/search?" + q,
+                                 headers={"Authorization": key, "User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        videos = json.load(r).get("videos") or []
+    for v in videos:
+        files = [f for f in v.get("video_files", []) if f.get("link") and (f.get("width") or 0) >= 540]
+        if not files:
+            continue
+        files.sort(key=lambda f: abs((f.get("width") or 0) - 1080))
+        return files[0]["link"]
+    raise ValueError("no Pexels video for %r" % query)
+
+
+def resolve(entry):
+    entry = (entry or "").strip()
+    return entry if entry.startswith(("http://", "https://", "file://")) else pexels_url(entry)
+
+
 def get_broll(urls, i, path):
-    """Use clip i; if it is missing or broken, fall back to the other clips in order."""
+    """Use clip i; if it is missing or broken, fall back to the other clips in order.
+
+    Each entry is either a direct video URL or a search phrase looked up on Pexels."""
     for j in [i] + [k for k in range(len(urls)) if k != i]:
         try:
-            fetch(urls[j], path)
+            fetch(resolve(urls[j]), path)
             if j != i:
                 print("b-roll %d unavailable, reused clip %d" % (i, j))
             return
