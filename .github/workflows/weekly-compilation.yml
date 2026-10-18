@@ -9,7 +9,7 @@ on:
         required: false
         default: ""
       post_to_youtube:
-        description: "Queue the result on YouTube through Buffer"
+        description: "Upload the result to YouTube (through the Make webhook)"
         required: false
         default: "true"
 permissions:
@@ -30,6 +30,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+          MAKE_WEBHOOK_URL: ${{ secrets.MAKE_WEBHOOK_URL }}
           MANIFEST: ${{ github.event.inputs.manifest }}
           POST_TO_YOUTUBE: ${{ github.event.inputs.post_to_youtube || 'true' }}
         run: python3 compile.py
