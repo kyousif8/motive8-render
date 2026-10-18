@@ -3,7 +3,8 @@
 Every b-roll clip is checked before it can go into a video:
   1. Words in the Pexels page address (its title) - swimwear, underwear, kissing, same-sex couples, etc.
   2. A nudity/body-exposure detector (NudeNet) run on frames across the clip: bras, bikinis, bare
-     midriffs, cleavage, bare shoulders/armpits, short shorts and anything more are rejected.
+     midriffs, cleavage, short shorts and anything more are rejected. Sleeveless tops and shirtless men
+     are allowed (Khalid's rule, 18 Oct 2026).
   3. No romantic couple footage at all: a search phrase about a couple/marriage/wedding is swapped for
      symbolic shots (rings, two coffee cups, a home interior...), and any stock clip whose title mentions
      a couple, love, kissing, hugging or holding hands is skipped. Stock sites cannot be trusted to show
@@ -16,7 +17,7 @@ import glob, os, re, shutil, subprocess, tempfile
 BLOCK_WORDS = [
     # body exposure
     "bikini", "lingerie", "bra", "bralette", "underwear", "panties", "swimsuit", "swimwear", "swimming",
-    "swimmer", "swim", "pool", "topless", "shirtless", "naked", "nude", "nudity", "sexy", "sensual",
+    "swimmer", "swim", "pool", "topless", "naked", "nude", "nudity", "sexy", "sensual",
     "seductive", "erotic", "sauna", "shower", "bathtub", "bath", "bathing", "twerk", "twerking",
     "pole", "belly-dance", "cleavage", "crop-top", "sports-bra", "beach-body", "body-positive",
     "massage", "spa", "tan", "tanning", "sunbathing", "sunbathe", "boxers", "briefs", "leggings",
@@ -47,8 +48,7 @@ LIMITS = {
     "FEMALE_BREAST_COVERED": 0.25, "FEMALE_BREAST_EXPOSED": 0.25, "FEMALE_GENITALIA_COVERED": 0.25,
     "FEMALE_GENITALIA_EXPOSED": 0.2, "MALE_GENITALIA_EXPOSED": 0.45, "BUTTOCKS_COVERED": 0.35,
     "BUTTOCKS_EXPOSED": 0.35, "ANUS_EXPOSED": 0.2, "ANUS_COVERED": 0.35, "BELLY_EXPOSED": 0.3,
-    "MALE_BREAST_EXPOSED": 0.3, "ARMPITS_EXPOSED": 0.3,
-}
+}  # MALE_BREAST_EXPOSED and ARMPITS_EXPOSED removed: shirtless men and sleeveless tops are fine.
 FRAMES = 10
 
 _detector = None

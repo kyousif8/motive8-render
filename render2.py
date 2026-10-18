@@ -166,6 +166,22 @@ def chunks(text, n=3):
     return [" ".join(words[k:k + n]) for k in range(0, len(words), n)] or [""]
 
 
+def text_width(text, size):
+    """Pixel width of text in FONT at this size (Pillow if available, else a safe estimate)."""
+    try:
+        from PIL import ImageFont
+        return ImageFont.truetype(FONT, size).getlength(text)
+    except Exception:
+        return len(text) * size * 0.62
+
+
+def fit_size(text, size, max_w=W * 0.88, min_size=54):
+    """Largest font size <= size so the caption fits inside the frame (never cut off at the edges)."""
+    while size > min_size and text_width(text, size) > max_w:
+        size -= 2
+    return size
+
+
 def wfile(path, text):
     open(path, "w", encoding="utf-8").write(text)
     return path
@@ -214,9 +230,11 @@ def main(job_path):
     filters, t0, k = [], 0.0, 0
     title = (job.get("title") or "").strip()
     if title:
-        tf = wfile("work/title.txt", "\n".join(textwrap.wrap(title, 18)))
+        tlines = textwrap.wrap(title, 18)
+        tfs = min(fit_size(line, 78) for line in tlines)
+        tf = wfile("work/title.txt", "\n".join(tlines))
         filters.append(
-            f"drawtext=fontfile={FONT}:textfile={tf}:fontsize=78:fontcolor=white:line_spacing=12:text_align=center:"
+            f"drawtext=fontfile={FONT}:textfile={tf}:fontsize={tfs}:fontcolor=white:line_spacing=12:text_align=center:"
             f"x=(w-text_w)/2:y=h*0.20:box=1:boxcolor=black@0.55:boxborderw=28:enable='lt(t,2.2)'")
     for i in range(n):
         cs = chunks(caps[i].strip())
@@ -224,9 +242,13 @@ def main(job_path):
         tt = t0
         for c, wc in zip(cs, weights_c):
             d = segs[i] * wc / sum(weights_c)
+            fs = fit_size(c, 86)
+            if text_width(c, fs) > W * 0.88:  # still too wide at the smallest size: split onto two lines
+                c = "\n".join(textwrap.wrap(c, max(len(c) // 2 + 1, 8)))
             cf = wfile(f"work/c{k:03d}.txt", c)
             filters.append(
-                f"drawtext=fontfile={FONT}:textfile={cf}:fontsize=86:fontcolor=white:borderw=7:bordercolor=black@0.9:"
+                f"drawtext=fontfile={FONT}:textfile={cf}:fontsize={fs}:fontcolor=white:borderw=7:bordercolor=black@0.9:"
+                f"line_spacing=10:text_align=center:"
                 f"shadowx=0:shadowy=5:shadowcolor=black@0.5:x=(w-text_w)/2:y=h*0.64:enable='between(t,{tt:.3f},{tt + d:.3f})'")
             tt += d
             k += 1

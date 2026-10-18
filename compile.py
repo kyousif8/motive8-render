@@ -3,7 +3,8 @@
 Picks the story videos saved in the last 7 days (sidecars in the "stories" release), or a manifest
 passed in by hand, turns each vertical story into a 16:9 1080p clip (sharp video centred on a
 blurred copy of itself), joins them with a short end card, writes YouTube chapters, publishes the
-file to the "compilations" release and queues it on the YouTube channel through Buffer.
+file to the "compilations" release and sends it to the Make webhook (MAKE_WEBHOOK_URL), which uploads
+it to YouTube. Falls back to queuing through Buffer if no webhook secret is set.
 """
 import datetime as dt, json, os, subprocess, sys, urllib.request
 
@@ -132,6 +133,16 @@ def main():
     desc = "\n".join(lines)
     print(title); print(desc)
     open(f"out/{name}.txt", "w", encoding="utf-8").write(title + "\n\n" + desc)
+
+    hook = os.environ.get("MAKE_WEBHOOK_URL", "").strip()
+    if post and hook:
+        # Make downloads the file from the release and uploads it to YouTube itself (full length, own title).
+        payload = {"video_url": COMPS + name, "title": title[:100], "description": desc[:4900]}
+        req = urllib.request.Request(hook, data=json.dumps(payload).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            print("Make webhook:", r.status, r.read()[:200])
+        return
 
     key = os.environ.get("BUFFER_API_KEY", "").strip()
     if not post or not key:
