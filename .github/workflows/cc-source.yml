@@ -1,0 +1,39 @@
+name: cc-source
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "scout = search for Creative Commons videos; download = fetch one CC video for Descript"
+        required: true
+        default: "scout"
+      queries:
+        description: "scout: search phrases separated by ; (empty = defaults)"
+        required: false
+        default: ""
+      url:
+        description: "download: the YouTube video URL"
+        required: false
+        default: ""
+permissions:
+  contents: write
+concurrency: cc-source
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Install ffmpeg and yt-dlp
+        run: |
+          for i in 1 2 3; do timeout 240 sudo apt-get update -qq && timeout 300 sudo apt-get install -y -qq ffmpeg && break; sleep 5; done
+          pip install -q -U "yt-dlp[default]"
+      - name: Run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ github.event.inputs.mode }}
+          QUERIES: ${{ github.event.inputs.queries }}
+          URL: ${{ github.event.inputs.url }}
+        run: python3 cc_source.py
