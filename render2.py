@@ -182,6 +182,19 @@ def fit_size(text, size, max_w=W * 0.88, min_size=54):
     return size
 
 
+def hook_line(caption, limit=120):
+    """Opening one or two sentences of Caption_1 (the twist hook), up to `limit` characters; "" if none fits."""
+    import re
+    parts = re.findall(r"[^.!?]+[.!?]+[\"')\u201d]*|[^.!?]+$", (caption or "").strip())
+    hook = ""
+    for p in parts[:2]:
+        cand = (hook + " " + p.strip()).strip()
+        if len(cand) > limit:
+            break
+        hook = cand
+    return hook
+
+
 def wfile(path, text):
     open(path, "w", encoding="utf-8").write(text)
     return path
@@ -226,22 +239,34 @@ def main(job_path):
             f.write(f"file '{os.path.basename(p)}'\n")
     sh(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", "work/list.txt", "-c", "copy", "work/visual.mp4"])
 
-    # 2) Text: hook title for the first 2.2 s, captions in 3-word chunks timed across each segment, handle.
+    # 2) Text: the hook (opening line of Caption_1) big at the top while it is spoken - or the title card for
+    #    2.2 s when there is no hook - then captions in 3-word chunks timed across each segment, then the handle.
     filters, t0, k = [], 0.0, 0
-    title = (job.get("title") or "").strip()
-    if title:
-        tlines = textwrap.wrap(title, 18)
-        tfs = min(fit_size(line, 78) for line in tlines)
+    hook = hook_line(caps[0]) if caps else ""
+    hook_end = 0.0
+    top = hook or (job.get("title") or "").strip()
+    if top:
+        if hook:
+            share = len(hook) / max(len(caps[0].strip()), 1)
+            hook_end = min(max(segs[0] * share + 0.3, 2.2), 6.0)
+            show_until = hook_end
+        else:
+            show_until = 2.2
+        tlines = textwrap.wrap(top, 18)
+        tfs = min(fit_size(line, 84) for line in tlines)
         tf = wfile("work/title.txt", "\n".join(tlines))
         filters.append(
             f"drawtext=fontfile={FONT}:textfile={tf}:fontsize={tfs}:fontcolor=white:line_spacing=12:text_align=center:"
-            f"x=(w-text_w)/2:y=h*0.20:box=1:boxcolor=black@0.55:boxborderw=28:enable='lt(t,2.2)'")
+            f"x=(w-text_w)/2:y=h*0.20:box=1:boxcolor=black@0.6:boxborderw=28:enable='lt(t,{show_until:.3f})'")
     for i in range(n):
         cs = chunks(caps[i].strip())
         weights_c = [max(len(c), 4) for c in cs]
         tt = t0
         for c, wc in zip(cs, weights_c):
             d = segs[i] * wc / sum(weights_c)
+            if tt + d <= hook_end:
+                tt += d
+                continue
             fs = fit_size(c, 86)
             if text_width(c, fs) > W * 0.88:  # still too wide at the smallest size: split onto two lines
                 c = "\n".join(textwrap.wrap(c, max(len(c) // 2 + 1, 8)))

@@ -49,7 +49,7 @@ LIMITS = {
     "FEMALE_GENITALIA_EXPOSED": 0.2, "MALE_GENITALIA_EXPOSED": 0.45, "BUTTOCKS_COVERED": 0.35,
     "BUTTOCKS_EXPOSED": 0.35, "ANUS_EXPOSED": 0.2, "ANUS_COVERED": 0.35, "BELLY_EXPOSED": 0.3,
 }  # MALE_BREAST_EXPOSED and ARMPITS_EXPOSED removed: shirtless men and sleeveless tops are fine.
-FRAMES = 10
+FRAMES = 16
 
 _detector = None
 _detector_failed = False
