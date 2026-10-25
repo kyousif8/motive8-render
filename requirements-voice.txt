@@ -2,3 +2,4 @@ kokoro>=0.9
 soundfile
 numpy
 nudenet>=3.4
+preshed<3.0.14
