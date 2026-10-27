@@ -200,6 +200,39 @@ def wfile(path, text):
     return path
 
 
+def text_pass(filters):
+    """Burn the text onto work/visual.mp4 -> work/texted.mp4, surviving a bad ffmpeg build or a bad visual track.
+
+    Attempt 1: as written. Attempt 2: re-encode the visual track first (fixes odd concat-copy output).
+    Attempt 3: simpler drawtext options (no text_align / box / shadow). Every failure prints ffmpeg's real error."""
+    def run(src, script):
+        cmd = ["ffmpeg", "-y", "-v", "error", "-i", src, "-filter_script:v", script,
+               "-c:v", "libx264", "-preset", "medium", "-crf", "27", "-maxrate", "1100k", "-bufsize", "2200k",
+               "-pix_fmt", "yuv420p", "work/texted.mp4"]
+        p = subprocess.run(cmd, capture_output=True, text=True)
+        if p.returncode != 0:
+            print("text pass failed (exit %d) on %s with %s\n%s" % (p.returncode, src, script, (p.stderr or "")[-1500:]))
+            v = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True).stdout.splitlines()[:1]
+            print("ffmpeg:", v)
+        return p.returncode == 0
+
+    if run("work/visual.mp4", "work/vf.txt"):
+        return
+    sh(["ffmpeg", "-y", "-v", "error", "-i", "work/visual.mp4", "-c:v", "libx264", "-preset", "veryfast",
+        "-crf", "18", "-pix_fmt", "yuv420p", "-r", str(FPS), "work/visual_fix.mp4"])
+    if run("work/visual_fix.mp4", "work/vf.txt"):
+        return
+    import re
+    simple = []
+    for f in filters:
+        f = re.sub(r":(text_align|box|boxcolor|boxborderw|shadowx|shadowy|shadowcolor|line_spacing)=[^:]+", "", f)
+        simple.append(f)
+    wfile("work/vf_simple.txt", ",".join(simple))
+    if run("work/visual_fix.mp4", "work/vf_simple.txt"):
+        return
+    raise SystemExit("ffmpeg text pass failed three ways; see errors above")
+
+
 def main(job_path):
     job = load_job(job_path)
     os.makedirs("work", exist_ok=True)
@@ -280,9 +313,7 @@ def main(job_path):
         t0 += segs[i]
     filters.append(f"drawtext=fontfile={FONT}:text='{HANDLE}':fontsize=34:fontcolor=white@0.55:x=(w-text_w)/2:y=h*0.90")
     wfile("work/vf.txt", ",".join(filters))
-    sh(["ffmpeg", "-y", "-v", "error", "-i", "work/visual.mp4", "-filter_script:v", "work/vf.txt",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "27", "-maxrate", "1100k", "-bufsize", "2200k",
-        "-pix_fmt", "yuv420p", "work/texted.mp4"])
+    text_pass(filters)
 
     # 3) Audio: voice from frame one, music underneath.
     out = os.path.join("out", job["out_name"])

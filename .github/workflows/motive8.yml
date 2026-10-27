@@ -24,8 +24,21 @@ jobs:
         with:
           path: ~/.cache/huggingface
           key: kokoro-82m-v1
-      - name: Install ffmpeg
+      - name: Install ffmpeg (apt 6.1, the version the renderer was built and tested on)
+        id: apt_ffmpeg
+        continue-on-error: true
+        timeout-minutes: 6
+        run: |
+          sudo rm -f /var/lib/man-db/auto-update
+          echo 'Acquire::Retries "2"; Acquire::http::Timeout "20"; Acquire::https::Timeout "20";' | sudo tee /etc/apt/apt.conf.d/99net >/dev/null
+          timeout 150 sudo apt-get install -y -qq --no-install-recommends ffmpeg \
+            || { timeout 120 sudo apt-get update -qq && timeout 150 sudo apt-get install -y -qq --no-install-recommends ffmpeg; }
+          ffmpeg -version | head -1
+      - name: Install ffmpeg (fallback if apt hangs, pinned to 6.1)
+        if: steps.apt_ffmpeg.outcome != 'success'
         uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          ffmpeg-version: "6.1"
       - name: Download font
         run: |
           mkdir -p fonts
@@ -53,7 +66,9 @@ jobs:
       - name: Render
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-        run: python3 render2.py job.txt
+        run: |
+          ffmpeg -version | head -1
+          python3 render2.py job.txt
       - name: Publish to the "renders" release
         env:
           GH_TOKEN: ${{ github.token }}
