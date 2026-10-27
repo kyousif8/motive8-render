@@ -14,11 +14,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Install ffmpeg and font
+      - name: Install ffmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
+      - name: Download font
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
           mkdir -p fonts
-          curl -sL -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
+          curl -sL --retry 3 -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
       - name: Write job file
         env:
           JOB: ${{ github.event.inputs.job }}

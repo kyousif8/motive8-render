@@ -21,11 +21,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Install ffmpeg and font
+      - name: Install ffmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
+      - name: Download font
         run: |
-          for i in 1 2 3; do timeout 240 sudo apt-get update -qq && timeout 300 sudo apt-get install -y -qq ffmpeg && break; sleep 5; done
           mkdir -p fonts
-          curl -sL -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
+          curl -sL --retry 3 -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
       - name: Build and queue the compilation
         env:
           GH_TOKEN: ${{ github.token }}

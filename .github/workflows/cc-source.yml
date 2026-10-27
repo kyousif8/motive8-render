@@ -26,10 +26,10 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Install ffmpeg and yt-dlp
-        run: |
-          for i in 1 2 3; do timeout 240 sudo apt-get update -qq && timeout 300 sudo apt-get install -y -qq ffmpeg && break; sleep 5; done
-          pip install -q -U "yt-dlp[default]"
+      - name: Install ffmpeg
+        uses: FedericoCarboni/setup-ffmpeg@v3
+      - name: Install yt-dlp
+        run: pip install -q -U "yt-dlp[default]"
       - name: Run
         env:
           GH_TOKEN: ${{ github.token }}
