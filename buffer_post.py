@@ -69,6 +69,27 @@ def backlog_items():
     return items
 
 
+MANUAL_DIR = "waiting"
+
+
+def manual_items():
+    """Hand-picked clips (JSON files in the repo's waiting/ folder) go ahead of the render backlog."""
+    if not os.path.isdir(MANUAL_DIR):
+        return []
+    names = sorted(n for n in os.listdir(MANUAL_DIR) if n.endswith(".json"))
+    return [(f"{MANUAL_DIR}/{n}", json.load(open(f"{MANUAL_DIR}/{n}", encoding="utf-8"))) for n in names]
+
+
+def remove_waiting(name):
+    if name.startswith(MANUAL_DIR + "/"):
+        sha = subprocess.run(["git", "hash-object", name], capture_output=True, text=True).stdout.strip()
+        repo = os.environ.get("GITHUB_REPOSITORY", "kyousif8/motive8-render")
+        gh("api", "-X", "DELETE", f"repos/{repo}/contents/{name}", "-f", f"message=Queued {name} on TikTok",
+           "-f", f"sha={sha}", check=False)
+    else:
+        gh("release", "delete-asset", BACKLOG, name, "-y", check=False)
+
+
 def queue_count(key):
     q = """query($org: OrganizationId!, $ch: [ChannelId!]) {
       posts(first: 50, input: {organizationId: $org, filter: {channelIds: $ch, status: [scheduled]}}) { edges { node { id } } } }"""
@@ -100,11 +121,11 @@ def main(path):
         print("Job has no caption field; nothing new to add.")
 
     room = QUEUE_LIMIT - queue_count(key)
-    waiting = backlog_items()
+    waiting = manual_items() + backlog_items()
     print(f"TikTok queue has {room} free spot(s); {len(waiting)} video(s) waiting.")
     for name, item in waiting[:max(room, 0)]:
         if post(key, item["file"], item["caption"], item.get("url")):
-            gh("release", "delete-asset", BACKLOG, name, "-y", check=False)
+            remove_waiting(name)
         else:
             print(f"{item['file']} stays in the waiting line.")
             break
