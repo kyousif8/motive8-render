@@ -78,11 +78,11 @@ def queue_count(key):
     return len(res["data"]["posts"]["edges"] or [])
 
 
-def post(key, out_name, caption):
+def post(key, out_name, caption, url=None):
     m = """mutation($input: CreatePostInput!) { createPost(input: $input) {
       __typename ... on PostActionSuccess { post { id dueAt } } ... on MutationError { message } } }"""
     inp = {"channelId": TIKTOK, "mode": "addToQueue", "schedulingType": "automatic", "text": caption,
-           "assets": [{"video": {"url": REPO_RELEASE + out_name, "metadata": {"title": out_name}}}]}
+           "assets": [{"video": {"url": url or (REPO_RELEASE + out_name), "metadata": {"title": out_name}}}]}
     res = gql(key, m, {"input": inp})
     print(f"Buffer response for {out_name}:", json.dumps(res)[:300])
     return res.get("data", {}).get("createPost", {}).get("__typename") == "PostActionSuccess"
@@ -103,7 +103,7 @@ def main(path):
     waiting = backlog_items()
     print(f"TikTok queue has {room} free spot(s); {len(waiting)} video(s) waiting.")
     for name, item in waiting[:max(room, 0)]:
-        if post(key, item["file"], item["caption"]):
+        if post(key, item["file"], item["caption"], item.get("url")):
             gh("release", "delete-asset", BACKLOG, name, "-y", check=False)
         else:
             print(f"{item['file']} stays in the waiting line.")
