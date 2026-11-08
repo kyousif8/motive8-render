@@ -6,7 +6,7 @@ blurred copy of itself), joins them with a short end card, writes YouTube chapte
 file to the "compilations" release and sends it to the Make webhook (MAKE_WEBHOOK_URL), which uploads
 it to YouTube. Falls back to queuing through Buffer if no webhook secret is set.
 """
-import datetime as dt, json, os, subprocess, sys, urllib.request
+import datetime as dt, json, os, subprocess, sys, urllib.error, urllib.request
 
 REPO = "kyousif8/motive8-render"
 RENDERS = f"https://github.com/{REPO}/releases/download/renders/"
@@ -18,9 +18,22 @@ FONT = "fonts/Poppins-Bold.ttf"
 MIN_STORIES = 3
 
 
+def note(msg):
+    """Show a failure in the run's annotations (the API can read these, the raw logs are not always reachable)."""
+    msg = " ".join(str(msg).split())[-900:]
+    print("::error::" + msg.replace("%", "%25"))
+
+
 def sh(cmd, **kw):
     print("+", cmd if isinstance(cmd, str) else " ".join(cmd)[:200])
-    return subprocess.run(cmd, check=True, **kw)
+    p = subprocess.run(cmd, capture_output=True, text=True, **kw)
+    if p.returncode != 0:
+        err = (p.stderr or "")[-1500:]
+        print(err)
+        v = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True).stdout.splitlines()[:1]
+        note("exit %d: %s | %s | %s" % (p.returncode, (cmd if isinstance(cmd, str) else " ".join(cmd))[:120], err, v))
+        raise subprocess.CalledProcessError(p.returncode, cmd, p.stdout, p.stderr)
+    return p
 
 
 def out(cmd):
@@ -101,8 +114,13 @@ def main():
     end_vf = (f"drawtext=fontfile={FONT}:textfile=work/end1.txt:fontsize=72:fontcolor=white:x=(w-text_w)/2:y=h*0.40,"
               f"drawtext=fontfile={FONT}:textfile=work/end2.txt:fontsize=72:fontcolor=white:x=(w-text_w)/2:y=h*0.52,"
               "format=yuv420p")
-    sh(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x111111:s=1920x1080:r=30:d=6",
-        "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "6", "-vf", end_vf, *enc, "work/end.mp4"])
+    card = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x111111:s=1920x1080:r=30:d=6",
+            "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "6"]
+    try:
+        sh(card + ["-vf", end_vf, *enc, "work/end.mp4"])
+    except subprocess.CalledProcessError:
+        print("end card text failed; using a plain end card")
+        sh(card + ["-vf", "format=yuv420p", *enc, "work/end.mp4"])
     parts.append("work/end.mp4")
 
     with open("work/list.txt", "w") as f:
@@ -110,8 +128,12 @@ def main():
             f.write(f"file '{os.path.basename(p)}'\n")
     today = dt.date.today().isoformat()
     name = f"motive8-stories-{today}.mp4"
-    sh(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", "work/list.txt", "-c", "copy",
-        "-movflags", "+faststart", f"out/{name}"])
+    try:
+        sh(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", "work/list.txt", "-c", "copy",
+            "-movflags", "+faststart", f"out/{name}"])
+    except subprocess.CalledProcessError:
+        print("stream-copy join failed; re-encoding the join")
+        sh(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", "work/list.txt", *enc, f"out/{name}"])
     size = os.path.getsize(f"out/{name}") / 1e6
     total = duration(f"out/{name}")
     print(f"Compilation: {name}, {total / 60:.1f} min, {size:.0f} MB")
@@ -140,8 +162,12 @@ def main():
         payload = {"video_url": COMPS + name, "title": title[:100], "description": desc[:4900]}
         req = urllib.request.Request(hook, data=json.dumps(payload).encode(),
                                      headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            print("Make webhook:", r.status, r.read()[:200])
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                print("Make webhook:", r.status, r.read()[:200])
+        except urllib.error.HTTPError as e:
+            note("Make webhook rejected the compilation: HTTP %s %s" % (e.code, e.read()[:300]))
+            raise
         return
 
     key = os.environ.get("BUFFER_API_KEY", "").strip()
@@ -161,4 +187,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except subprocess.CalledProcessError:
+        raise  # already annotated by sh()
+    except BaseException as e:
+        if not isinstance(e, SystemExit) or e.code not in (0, None):
+            note("%s: %s" % (type(e).__name__, e))
+        raise

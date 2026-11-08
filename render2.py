@@ -17,8 +17,18 @@ FONT = os.environ.get("M8_FONT", "fonts/Poppins-Bold.ttf")
 HANDLE = "@motive8ers"
 
 
+def note(msg):
+    """Show a failure in the run's annotations (the API can read these, the raw logs are not always reachable)."""
+    msg = " ".join(str(msg).split())[-900:]
+    print("::error::" + msg.replace("%", "%25"))
+
+
 def sh(cmd):
-    subprocess.run(cmd, check=True)
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    if p.returncode != 0:
+        print(p.stderr or "")
+        note("exit %d: %s | %s" % (p.returncode, " ".join(cmd)[:120], (p.stderr or "")[-600:]))
+        raise subprocess.CalledProcessError(p.returncode, cmd, p.stdout, p.stderr)
 
 
 def fetch(url, path, tries=3):
@@ -338,4 +348,11 @@ def main(job_path):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "job.json")
+    try:
+        main(sys.argv[1] if len(sys.argv) > 1 else "job.json")
+    except subprocess.CalledProcessError:
+        raise  # already annotated by sh()
+    except BaseException as e:
+        if not isinstance(e, SystemExit) or e.code not in (0, None):
+            note("%s: %s" % (type(e).__name__, e))
+        raise
