@@ -16,6 +16,11 @@ def main(job_path):
     if dur < 45:
         print(f"{out_name}: {dur:.1f}s, not a story; skipping.")
         return
+    # Every video now runs over 61 s, so length alone no longer marks a story: it needs a moral.
+    last = base64.b64decode(raw[5]).decode("utf-8", "ignore") if len(raw) > 5 else ""
+    if "moral" not in last.lower():
+        print(f"{out_name}: no moral in the closing caption, not a story; skipping.")
+        return
     title = base64.b64decode(raw[17]).decode("utf-8") if len(raw) > 17 and raw[17] else out_name
     side = out_name.rsplit(".", 1)[0] + ".json"
     json.dump({"file": out_name, "title": title.strip(), "duration": round(dur, 2)},
