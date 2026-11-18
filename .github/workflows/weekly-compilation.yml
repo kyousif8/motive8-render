@@ -31,33 +31,35 @@ jobs:
           timeout 150 sudo apt-get install -y -qq --no-install-recommends ffmpeg \
             || { timeout 120 sudo apt-get update -qq && timeout 150 sudo apt-get install -y -qq --no-install-recommends ffmpeg; }
           ffmpeg -version | head -1
-      - name: Install ffmpeg (fallback 1, setup-ffmpeg pinned to 6.1)
-        id: action_ffmpeg
+          ffmpeg -hide_banner -filters | grep -q ' drawtext '
+      - name: Install ffmpeg (fallback, main Ubuntu mirror, then static build with drawtext)
         if: steps.apt_ffmpeg.outcome != 'success'
-        continue-on-error: true
-        timeout-minutes: 4
-        uses: FedericoCarboni/setup-ffmpeg@v3
-        with:
-          ffmpeg-version: "6.1"
-      - name: Install ffmpeg (fallback 2, apt via main Ubuntu mirror, then static 6.1 build)
-        if: steps.apt_ffmpeg.outcome != 'success' && steps.action_ffmpeg.outcome != 'success'
-        timeout-minutes: 8
+        timeout-minutes: 9
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if command -v ffmpeg >/dev/null; then ffmpeg -version | head -1; exit 0; fi
-          # The runner's default Azure mirror is what hung; switch to the main Ubuntu archive.
-          sudo sed -i 's#http://azure.archive.ubuntu.com#http://archive.ubuntu.com#g' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list 2>/dev/null || true
+          has_drawtext() { command -v ffmpeg >/dev/null && ffmpeg -hide_banner -filters 2>/dev/null | grep -q ' drawtext '; }
+          if has_drawtext; then ffmpeg -version | head -1; exit 0; fi
+          # The runner's default Azure mirror is what hangs; retry apt on the main Ubuntu archive.
           sudo pkill -9 -f 'apt-get|dpkg' 2>/dev/null || true
           sudo rm -f /var/lib/dpkg/lock* /var/lib/apt/lists/lock /var/cache/apt/archives/lock
           sudo dpkg --configure -a || true
-          if timeout 150 sudo apt-get update -qq && timeout 200 sudo apt-get install -y -qq --no-install-recommends ffmpeg; then
+          sudo sed -i 's#http://azure.archive.ubuntu.com#http://archive.ubuntu.com#g' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list 2>/dev/null || true
+          if timeout 150 sudo apt-get update -qq && timeout 200 sudo apt-get install -y -qq --no-install-recommends ffmpeg && has_drawtext; then
             ffmpeg -version | head -1; exit 0
           fi
-          echo "apt mirror failed too, trying static 6.1 build"
-          url=https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n6.1-latest-linux64-gpl-6.1.tar.xz
-          curl -fsSL --retry 4 --retry-delay 5 --max-time 180 -o /tmp/ff.tar.xz "$url"
+          # Last resort: BtbN static GPL build (has freetype/drawtext). Prefer 6.1, else newest release branch.
+          echo "apt failed on both mirrors, using BtbN static build"
+          names=$(gh release view latest -R BtbN/FFmpeg-Builds --json assets -q '.assets[].name' | grep -E '^ffmpeg-n[0-9.]+-latest-linux64-gpl-[0-9.]+\.tar\.xz$' | sort -V)
+          name=$(echo "$names" | grep -- '-gpl-6\.1\.' | head -1)
+          [ -n "$name" ] || name=$(echo "$names" | tail -1)
+          echo "using $name"
+          curl -fsSL --retry 4 --retry-delay 5 --max-time 240 -o /tmp/ff.tar.xz "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$name"
           mkdir -p /tmp/ff && tar -xJf /tmp/ff.tar.xz -C /tmp/ff --strip-components=1
           echo /tmp/ff/bin >> "$GITHUB_PATH"
-          /tmp/ff/bin/ffmpeg -version | head -1
+          export PATH=/tmp/ff/bin:$PATH
+          has_drawtext || { echo "::error::no ffmpeg with drawtext could be installed"; exit 1; }
+          ffmpeg -version | head -1
       - name: Download font
         run: |
           mkdir -p fonts
