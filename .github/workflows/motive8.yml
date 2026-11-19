@@ -5,8 +5,13 @@ on:
       job:
         description: "Render job (JSON or compact ~ format sent by Make)"
         required: true
+      attempt:
+        description: "Retry counter (set by the workflow itself; leave empty)"
+        required: false
+        default: "1"
 permissions:
   contents: write
+  actions: write
 concurrency: motive8
 jobs:
   render:
@@ -88,6 +93,7 @@ jobs:
         continue-on-error: true
         run: python3 kokoro_tts.py job.txt
       - name: Render
+        id: render
         env:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
@@ -110,3 +116,14 @@ jobs:
           BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: python3 buffer_post.py job.txt
+      - name: Retry once if the render itself failed
+        # Only when the Render step failed (nothing was published or queued yet), and only once,
+        # so a retry can never duplicate a post or loop.
+        if: failure() && steps.render.outcome == 'failure' && (github.event.inputs.attempt || '1') == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB: ${{ github.event.inputs.job }}
+        run: |
+          echo "::notice::Render failed on attempt 1; starting attempt 2 automatically."
+          gh api -X POST "repos/${{ github.repository }}/actions/workflows/motive8.yml/dispatches" \
+            -f ref="${{ github.ref_name }}" -f "inputs[job]=$JOB" -f "inputs[attempt]=2"
