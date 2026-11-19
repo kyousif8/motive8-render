@@ -236,6 +236,15 @@ def text_pass(filters):
             print("text pass failed (exit %d) on %s with %s\n%s" % (p.returncode, src, script, (p.stderr or "")[-1500:]))
             v = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True).stdout.splitlines()[:1]
             print("ffmpeg:", v)
+            try:
+                has_dt = " drawtext " in subprocess.run(["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True).stdout
+                fsz = os.path.getsize(FONT) if os.path.exists(FONT) else -1
+                fhead = open(FONT, "rb").read(4).hex() if fsz > 0 else ""
+                which = subprocess.run(["which", "ffmpeg"], capture_output=True, text=True).stdout.strip()
+            except Exception as e:  # diagnostics must never hide the real error
+                has_dt, fsz, fhead, which = "?", "?", "?", "?"
+            note("text pass failed (exit %d) src=%s script=%s | ffmpeg=%s %s drawtext_listed=%s font=%s size=%s head=%s | %s"
+                 % (p.returncode, src, script, which, v, has_dt, FONT, fsz, fhead, (p.stderr or "")[-500:]))
         return p.returncode == 0
 
     if run("work/visual.mp4", "work/vf.txt"):

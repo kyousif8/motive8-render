@@ -19,7 +19,7 @@ jobs:
       - name: Download font
         run: |
           mkdir -p fonts
-          curl -sL --retry 3 -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
+          [ -s fonts/Poppins-Bold.ttf ] || curl -fsSL --retry 5 --retry-delay 3 -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
       - name: Write job file
         env:
           JOB: ${{ github.event.inputs.job }}

@@ -29,7 +29,7 @@ jobs:
       - name: Install tools
         run: |
           mkdir -p fonts
-          curl -sL --retry 3 -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
+          [ -s fonts/Poppins-Bold.ttf ] || curl -fsSL --retry 5 --retry-delay 3 -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
           pip install -q torch --index-url https://download.pytorch.org/whl/cpu
           pip install -q "kokoro>=0.9" soundfile
       - name: Write job file
