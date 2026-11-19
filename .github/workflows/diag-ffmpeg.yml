@@ -1,0 +1,37 @@
+name: diag-ffmpeg
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Font
+        run: |
+          mkdir -p fonts
+          curl -fsSL --retry 5 -o fonts/Poppins-Bold.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Bold.ttf
+          ls -l fonts/Poppins-Bold.ttf
+          echo "::notice::font size $(stat -c %s fonts/Poppins-Bold.ttf) header $(head -c4 fonts/Poppins-Bold.ttf | od -An -tx1)"
+      - name: Preinstalled ffmpeg on the runner
+        continue-on-error: true
+        run: |
+          which ffmpeg && ffmpeg -version | head -1 || echo "no preinstalled ffmpeg"
+      - name: Test BtbN static builds with the renderer's drawtext options
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          names=$(gh release view latest -R BtbN/FFmpeg-Builds --json assets -q '.assets[].name' | grep -E '^ffmpeg-n[0-9.]+-latest-linux64-gpl-[0-9.]+\.tar\.xz$' | sort -V)
+          echo "$names"
+          for name in $(echo "$names" | tail -3); do
+            rm -rf /tmp/ff; mkdir -p /tmp/ff
+            curl -fsSL --retry 4 --max-time 240 -o /tmp/ff.tar.xz "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$name"
+            tar -xJf /tmp/ff.tar.xz -C /tmp/ff --strip-components=1
+            F=/tmp/ff/bin/ffmpeg
+            v=$($F -version | head -1 | cut -c1-40)
+            printf 'Hello world\nsecond line' > /tmp/t.txt
+            $F -y -v error -f lavfi -i color=c=gray:s=1080x1920:r=30:d=2 -vf "drawtext=fontfile=fonts/Poppins-Bold.ttf:textfile=/tmp/t.txt:fontsize=80:fontcolor=white:borderw=7:bordercolor=black@0.9:line_spacing=10:text_align=center:shadowx=0:shadowy=5:shadowcolor=black@0.5:x=(w-text_w)/2:y=h*0.64:enable='between(t,0,1)'" -pix_fmt yuv420p /tmp/o.mp4 2>/tmp/err.txt && r=OK || r=FAIL
+            echo "::notice::$name | $v | $r | $(tr '\n' ' ' </tmp/err.txt | cut -c1-500)"
+          done
