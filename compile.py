@@ -1,7 +1,7 @@
 """Weekly long-form YouTube compilation of Motive8 story videos.
 
 Picks the story videos saved in the last 7 days (sidecars in the "stories" release), or a manifest
-passed in by hand, turns each vertical story into a 16:9 1080p clip (sharp video centred on a
+passed in by hand, turns each vertical story into a 16:9 720p clip (sharp video centred on a
 blurred copy of itself), joins them with a short end card, writes YouTube chapters, publishes the
 file to the "compilations" release and sends it to the Make webhook (MAKE_WEBHOOK_URL), which uploads
 it to YouTube. Falls back to queuing through Buffer if no webhook secret is set.
@@ -16,6 +16,7 @@ ORG = "5f3f4ddd70aa7f1d5d2e84b5"
 YOUTUBE = "68af8a783d2fbc20d49c276b"
 FONT = "fonts/Poppins-Bold.ttf"
 MIN_STORIES = 3
+MAX_STORIES = 7  # keeps the file ~55 MB: Make's free plan allows only 512 MB of transfer a month
 
 
 def note(msg):
@@ -65,7 +66,7 @@ def pick_stories(manifest):
             fetch(STORIES + a["name"], "side.json")
             picked.append(json.load(open("side.json", encoding="utf-8")))
     picked.sort(key=lambda s: int(s["file"].split("-")[1].split(".")[0]))
-    return picked
+    return picked[-MAX_STORIES:]
 
 
 def ts(sec):
@@ -93,10 +94,10 @@ def main():
     os.makedirs("work", exist_ok=True)
     os.makedirs("out", exist_ok=True)
     vf = ("[0:v]split[a][b];"
-          "[a]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=28:2,eq=brightness=-0.12[bg];"
-          "[b]scale=-2:1080[fg];[bg][fg]overlay=(W-w)/2:0,fps=30,format=yuv420p[v]")
-    enc = ["-c:v", "libx264", "-preset", "medium", "-crf", "23", "-maxrate", "1400k", "-bufsize", "2800k",
-           "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart"]
+          "[a]scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,boxblur=20:2,eq=brightness=-0.12[bg];"
+          "[b]scale=-2:720[fg];[bg][fg]overlay=(W-w)/2:0,fps=30,format=yuv420p[v]")
+    enc = ["-c:v", "libx264", "-preset", "medium", "-crf", "26", "-maxrate", "750k", "-bufsize", "1500k",
+           "-c:a", "aac", "-b:a", "96k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart"]
     parts, chapters, t = [], [], 0.0
     for i, s in enumerate(stories):
         src = f"work/src{i}.mp4"
@@ -111,10 +112,10 @@ def main():
     # End card: invite viewers to subscribe.
     open("work/end1.txt", "w").write("A new story with a moral")
     open("work/end2.txt", "w").write("every day on Motive8. Subscribe.")
-    end_vf = (f"drawtext=fontfile={FONT}:textfile=work/end1.txt:fontsize=72:fontcolor=white:x=(w-text_w)/2:y=h*0.40,"
-              f"drawtext=fontfile={FONT}:textfile=work/end2.txt:fontsize=72:fontcolor=white:x=(w-text_w)/2:y=h*0.52,"
+    end_vf = (f"drawtext=fontfile={FONT}:textfile=work/end1.txt:fontsize=52:fontcolor=white:x=(w-text_w)/2:y=h*0.40,"
+              f"drawtext=fontfile={FONT}:textfile=work/end2.txt:fontsize=52:fontcolor=white:x=(w-text_w)/2:y=h*0.52,"
               "format=yuv420p")
-    card = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x111111:s=1920x1080:r=30:d=6",
+    card = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x111111:s=1280x720:r=30:d=6",
             "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "6"]
     try:
         sh(card + ["-vf", end_vf, *enc, "work/end.mp4"])
